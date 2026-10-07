@@ -35,6 +35,7 @@ const DEBUG = false;       // set true to print state to the console on every UI
 // ==========================================
 let seqCounter = 0;        // every button press gets a number: lower = pressed earlier
 
+
 const state = {
   currentFloor: 0,
   direction: 0,            // 1 = UP, -1 = DOWN, 0 = IDLE
@@ -612,8 +613,11 @@ function normal_lift_logic() {
   }
 
   // 6. Pick a direction and move one floor
-  const previous = state.direction;
+    const previous = state.direction;
   state.direction = chooseDirection();
+
+  // Nothing to serve -> maybe drift to the predicted floor
+  if (state.direction === 0) state.direction = chooseParkDirection();
 
   if (state.direction === 0) {
     if (previous !== 0) logEvent(`Lift idle at ${floorName(state.currentFloor)} floor.`, 'system');
@@ -685,6 +689,7 @@ function bindEvents() {
     servedWaiting = 0;
     servedDirection = null;
     seqCounter = 0;
+    idleTicks = 0;
     pendingHallCalls.clear();
 
     Object.assign(state, {
@@ -719,12 +724,213 @@ function bindEvents() {
   });
 }
 
+// 'north' or 'south': seasons are reversed in the Southern Hemisphere
+const HEMISPHERE = 'north';
+
+function getSeason(date = new Date()) {
+  const month = date.getMonth();   // 0 = Jan ... 11 = Dec
+
+  // Meteorological seasons (Northern Hemisphere)
+  let season;
+  if (month >= 2 && month <= 4) season = 'Spring';        // Mar - May
+  else if (month >= 5 && month <= 7) season = 'Summer';   // Jun - Aug
+  else if (month >= 8 && month <= 10) season = 'Autumn';  // Sep - Nov
+  else season = 'Winter';                                 // Dec - Feb
+
+  if (HEMISPHERE === 'south') {
+    const flip = { Spring: 'Autumn', Summer: 'Winter', Autumn: 'Spring', Winter: 'Summer' };
+    season = flip[season];
+  }
+  return season;
+}
+
+// Instantiate model
+const model = new OnlineTabularRegressor({ learningRate: 0.05 });
+
+const SEASON_ICONS = { Spring: '🌸', Summer: '☀️', Autumn: '🍂', Winter: '❄️' };
+const DAYS_MAP = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Tracks current time bucket to know when to re-predict
+let currentBucket = -1;
+let currentClickCount = 0; // Tracks actual clicks in current window
+
+function getCurrentFactors() {
+  const now = new Date();
+
+  const season = getSeason(now); // Your season function
+  const dayName = DAYS_MAP[now.getDay()];
+
+  // 15-minute interval index: (Hours * 4) + Math.floor(Minutes / 15) -> Ranges 0 to 95
+  const timeFloor = (now.getHours() * 4) + Math.floor(now.getMinutes() / 15);
+
+  return { season, timeFloor, dayName };
+}
+
+function startClock() {
+  const clockEl = document.getElementById('clock');
+  const dateEl = document.getElementById('date');
+  const seasonEl = document.getElementById('season');
+  const predEl = document.getElementById('predictionOutput');
+
+  const tick = () => {
+    const now = new Date();
+
+    if (clockEl) {
+      clockEl.textContent = now.toLocaleTimeString([], {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+      });
+    }
+
+    if (dateEl) {
+      dateEl.textContent = now.toLocaleDateString([], {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+    }
+
+    if (seasonEl) {
+      const season = getSeason(now);
+      seasonEl.textContent = `${SEASON_ICONS[season]} ${season}`;
+    }
+
+    // --- RE-PREDICT ON TIME RANGE CHANGE ---
+    const { season, timeFloor, dayName } = getCurrentFactors();
+    
+    // Only update prediction when entering a new 15-minute interval
+    if (timeFloor !== currentBucket) {
+      currentBucket = timeFloor;
+      currentClickCount = 0; // Reset click count for new interval
+
+      if (predEl) {
+        const rawPrediction = model.predict(season, timeFloor, dayName);
+        predEl.textContent = Math.round(rawPrediction);
+      }
+    }
+  };
+
+  tick();
+  setInterval(tick, 1000);
+}
+
+// --- LEARN FROM FLOOR BUTTON CLICKS ONLY ---
+// 1. Prediction Function (Runs automatically as time updates)
+function updatePrediction() {
+  const predEl = document.getElementById('predictionOutput');
+  if (!predEl) return;
+
+  const { season, timeFloor, dayName } = getCurrentFactors();
+  const rawPrediction = model.predict(season, timeFloor, dayName);
+  
+  // Display predicted floor number (rounded)
+  predEl.textContent = Math.round(rawPrediction);
+}
+
+// 2. Training Function (Triggers ONLY when a floor button is clicked)
+function handleFloorButtonClick(event) {
+  // Check if clicked element (or its parent) has data-dest-floor
+  const btn = event.target.closest('[data-dest-floor]');
+  if (!btn) return; // Exit if user clicked anywhere else
+
+  // Extract floor number from dataset
+  const chosenFloor = Number(btn.dataset.destFloor);
+
+  // Get factors for right now
+  const { season, timeFloor, dayName } = getCurrentFactors();
+
+  // --- TRAINING STEP ---
+  // Model learns that for current (season, timeFloor, dayName), target F = chosenFloor
+  const error = model.learn(season, timeFloor, dayName, chosenFloor);
+  console.log(`Model Trained! Floor: ${chosenFloor}, Error: ${error.toFixed(2)}`);
+
+  // Instantly update UI prediction with newly learned weights
+  updatePrediction();
+}
+
+// 3. Attach Event Listener Immediately (No DOMContentLoaded required)
+document.addEventListener('click', handleFloorButtonClick);
+
+// 4. Initial Prediction Call
+updatePrediction();
+
+const PARKING_ENABLED = true;   // set false to turn this feature off
+const PARK_AFTER_TICKS = 3;     // idle ticks before the lift starts moving (3 ticks is about 2.7 s)
+let idleTicks = 0;
+
+function getPredictedFloor() {
+  if (!model) return null;
+  const { season, timeFloor, dayName } = getCurrentFactors();
+  const raw = model.predict(season, timeFloor, dayName);
+  return Math.max(0, Math.min(TOTAL_FLOORS, Math.round(raw)));
+}
+
+// Returns 1 / -1 to drift toward the predicted floor, or 0 to stay put
+function chooseParkDirection() {
+  if (!PARKING_ENABLED) return 0;
+
+  // Never park while there is real work or people still inside
+  if (state.load > 0 || state.requests.length || state.destinations.length) {
+    idleTicks = 0;
+    return 0;
+  }
+
+  const target = getPredictedFloor();
+  if (target === null || target === state.currentFloor) {
+    idleTicks = 0;
+    return 0;
+  }
+
+  idleTicks++;
+  if (idleTicks < PARK_AFTER_TICKS) return 0;
+  if (idleTicks === PARK_AFTER_TICKS) {
+    logEvent(`Idle. Heading to predicted floor ${floorName(target)}.`, 'system');
+  }
+  return Math.sign(target - state.currentFloor);
+}
+
+// ----- TRAINING DATASET: edit these times and floors to match your building -----
+const SCHEDULE = [
+  { from: 8,  to: 9,    floors: [0] },     //  8:00 - 9:00   -> G
+  { from: 12, to: 13.5, floors: [6, 7] },  // 12:00 - 1:30pm -> 6 and 7
+  { from: 17, to: 18,   floors: [10] },    //  5:00 - 6:00pm -> 10
+];
+const DEFAULT_FLOOR = 0;                   // every other time of day -> G
+
+function pretrainModel(epochs = 20) {
+  if (!model) return;
+  const seasons = ['Spring', 'Summer', 'Autumn', 'Winter'];
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  for (let e = 0; e < epochs; e++) {
+    for (const s of seasons) {
+      for (const d of days) {
+        for (let bucket = 0; bucket < 96; bucket++) {
+          const hour = bucket / 4;   // 15-minute slot -> hour of day
+          const slot = SCHEDULE.find(x => hour >= x.from && hour < x.to);
+          const floors = slot ? slot.floors : [DEFAULT_FLOOR];
+          floors.forEach(f => model.learn(s, bucket, d, f, false));
+        }
+      }
+    }
+  }
+  model.saveState();
+  logEvent('Model pre-trained with the starting dataset.', 'system');
+}
+
 // ==========================================
 // START
 // ==========================================
 function init() {
   buildUI();
   bindEvents();
+
+  // run the starting dataset only the first time
+  try {
+    if (model && !localStorage.getItem('lift_pretrained')) {
+      pretrainModel();
+      localStorage.setItem('lift_pretrained', '1');
+    }
+  } catch (e) { console.warn(e); }
+
+  startClock();
 }
 
 if (document.readyState === 'loading') {

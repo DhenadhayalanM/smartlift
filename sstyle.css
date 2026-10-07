@@ -668,3 +668,8 @@ select {
     padding: 4px;
     margin-top: 4px;
 }
+
+.clock-box { text-align: center; padding: 8px 12px; }
+.clock  { font-family: 'Courier New', monospace; font-size: 1.4rem; letter-spacing: 2px; }
+.date   { font-size: 0.95rem; opacity: 0.85; }
+.season { font-size: 0.95rem; font-weight: 600; margin-top: 2px; }
