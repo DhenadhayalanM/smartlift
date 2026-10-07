@@ -1,4 +1,3 @@
-
 :root {
     --ink: #16211f;
     --paper: #f3f0e8;
@@ -634,4 +633,38 @@ select {
     .floor-control {
         grid-template-columns: 24px 1fr auto;
     }
+}
+
+#modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+#modal.hidden {
+    display: none;
+}
+
+.box {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    min-width: 280px;
+    max-width: min(420px, calc(100vw - 32px));
+}
+
+.box label {
+    display: block;
+    margin: 8px 0;
+    font-size: .85rem;
+}
+
+.box input {
+    width: 100%;
+    padding: 4px;
+    margin-top: 4px;
 }
