@@ -4,82 +4,331 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Lift Lab — Normal Lift Simulation</title>
+  <title>Lift Lab — SmartLift OS Simulation</title>
   <link rel="stylesheet" href="sstyle.css" />
 </head>
 
-<body>
- <div class="clock-box">
-  <div id="clock" class="clock">--:--:--</div>
-  <div id="date" class="date">---</div>
-  <div id="season" class="season">---</div>
+<div class="top-bar-nav">
+  <div>
+    <strong>SMARTLIFT AI LAB</strong> &mdash; Predictive Demand, Skip-Return & Vision Dispatch
+  </div>
+  <div style="display: flex; gap: 8px; align-items: center;">
+    <a href="INDEX.html" class="nav-link" title="Open baseline non-predictive LOOK/SCAN simulator">Switch to Baseline
+      (Classic)</a>
+    <button id="btn-run-benchmark" class="nav-link" style="background: var(--ink); color: #fff;">▶ Run Fair
+      Benchmark</button>
+  </div>
 </div>
-  <main>
-   
-    <section id="left">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">LIVE SHAFT</p>
-          <h2>Lift position</h2>
-        </div><span class="floor-chip" id="current-floor-label">G FLOOR</span>
-      </div>
-      <div id="shaft" aria-label="elevator shaft"></div>
-    </section>
 
-    <section id="right">
-      <div class="panel">
-        <p class="hint">Choose a direction on any floor, then advance one movement at a time.</p>
-        <div id="floor-controls"></div>
+<div class="clock-box">
+  <div style="display: flex; align-items: center; gap: 14px;">
+    <div id="clock" class="clock">--:--:--</div>
+    <div id="date" class="date">---</div>
+    <div id="season" class="season">---</div>
+  </div>
+  <div class="service-badges">
+    <span id="badge-backend" class="badge-pill online">API: Connecting...</span>
+    <span id="badge-ml" class="badge-pill">ML Model: Initializing</span>
+    <span id="badge-cv" class="badge-pill">CV: Ready</span>
+    <span id="badge-db" class="badge-pill">Storage: In-Memory</span>
+  </div>
+</div>
 
-        <div class="hr"></div>
-
-        <div class="small-buttons">
-          <button id="btn-step">STEP</button><button id="btn-run">AUTO RUN</button><button id="btn-stop">PAUSE</button>
-          <button id="btn-reset">Reset</button>
-        </div>
-
-      </div>
-    </section>
-
-    <section id="ins" class="panel">
-      <div class="led-screen"><span id="led-text">G</span></div>
-      <h3 id="text">Doors closed</h3>
-      <div class="door-controls">
-        <button id="grid5" aria-label="Open doors"><span class="door-icon open-icon"></span>OPEN</button><button
-          id="gridclose" aria-label="Close doors"><span class="door-icon close-icon"></span>CLOSE</button>
-      </div>
-      <div id="in-lift-buttons" class="in-lift-panel"></div>
-      <div id="pplinlift">a</div>
-    </section>
-  </main>
-
-  <section id="monitoring-section">
-    <div id="info">
-      <p class="eyebrow">LIVE STATUS</p>
-      <h2>System status</h2>
-      <pre id="status"></pre>
+<div class="time-controller-bar">
+  <div class="time-control-group">
+    <span class="control-label">TIME MODE:</span>
+    <div class="btn-toggle-group">
+      <button id="btn-mode-live" class="btn-toggle active" title="Follow real system clock">● Live Clock</button>
+      <button id="btn-mode-sim" class="btn-toggle" title="Switch to simulated clock to test ML traffic predictions">⏱️
+        Custom / Simulated</button>
     </div>
-    <div id="log-section">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">EVENT STREAM</p>
-          <h2>Lift log</h2>
-        </div><span id="log-count">0 EVENTS</span>
+    <span class="badge-pill online" id="clock-mode-badge" style="margin-left: 2px;">MODE: LIVE CLOCK</span>
+  </div>
+
+  <div class="time-control-group sim-inputs" id="sim-inputs-container">
+    <label for="sim-time-input" class="control-label">TIME:</label>
+    <input type="time" id="sim-time-input" class="time-picker-input" value="08:30" step="60" />
+
+    <label for="sim-date-input" class="control-label">DATE:</label>
+    <input type="date" id="sim-date-input" class="date-picker-input" value="2026-10-09" />
+
+    <button id="btn-apply-custom-time" class="btn-time-apply" title="Apply entered custom time and predict demand">Apply
+      & Forecast</button>
+  </div>
+
+  <div class="time-presets-group">
+    <span class="control-label">ML TRAFFIC PRESETS:</span>
+    <button class="btn-preset" data-time="08:30" data-label="Morning Inflow (Floor G Peak)"
+      title="Heavy morning rush arriving at lobby">
+      🌅 08:30 Morning (F0 Peak)
+    </button>
+    <button class="btn-preset" data-time="12:30" data-label="Lunch Peak (Cafeteria F6/7)"
+      title="Lunch movement between offices and cafeteria">
+      🍱 12:30 Lunch (F6-7)
+    </button>
+    <button class="btn-preset" data-time="17:30" data-label="Evening Outflow (Upper F6-10)"
+      title="Evening departure rush leaving upper office floors">
+      🌇 17:30 Evening (Upper F6-10)
+    </button>
+    <button class="btn-preset" data-time="02:00" data-label="Late Night (Off-Peak)" title="Low traffic off-peak period">
+      🌙 02:00 Night (Off-Peak)
+    </button>
+  </div>
+</div>
+
+<main>
+
+  <section id="left">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">LIVE SHAFT</p>
+        <h2>Lift position</h2>
+      </div><span class="floor-chip" id="current-floor-label">G FLOOR</span>
+    </div>
+    <div id="shaft" aria-label="elevator shaft"></div>
+  </section>
+
+  <section id="right">
+    <div class="panel">
+      <p class="hint">Choose a direction on any floor, then advance one movement at a time.</p>
+      <div id="floor-controls"></div>
+
+      <div class="hr"></div>
+
+      <div class="small-buttons">
+        <button id="btn-step">STEP</button><button id="btn-run">AUTO RUN</button><button id="btn-stop">PAUSE</button>
+        <button id="btn-reset">Reset</button>
       </div>
-      <ol id="event-log"></ol>
+
+      <div class="hr"></div>
+
+      <div class="scenario-buttons">
+        <div
+          style="font-size:0.75rem; font-weight:700; color:var(--ink); text-transform:uppercase; letter-spacing:0.5px; font-family:'DM Mono',monospace;">
+          🧪 1-Click Simulation Scenarios:
+        </div>
+        <button id="btn-scenario-normal" class="btn-scenario"
+          title="Lift at Ground heading to Dest 8 -> Outside call at Floor 3 UP (Stops on the way)">
+          <span>🛑</span> <span><strong>1. Normal On-The-Way Stop:</strong> Lift G &rarr; F8, Call F3 UP</span>
+        </button>
+        <button id="btn-scenario-detour" class="btn-scenario"
+          title="Lift at Floor 3 heading to Dest 8 -> Request at Floor 2 UP (Reverses 1 floor, then resumes to 8)">
+          <span>⚡</span> <span><strong>2. Feasible Detour:</strong> Lift F3 &rarr; F8, Call F2 UP</span>
+        </button>
+        <button id="btn-scenario-skip" class="btn-scenario"
+          title="Lift at Floor 5 FULL heading to Dest 8 -> Outside call at Floor 4 UP (Skips while full, returns when empty)">
+          <span>🔁</span> <span><strong>3. Occupancy Skip &amp; Return:</strong> F5 Full &rarr; F8, Call F4 UP</span>
+        </button>
+      </div>
+
     </div>
   </section>
-  <div id="modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="m-title">
-    <div class="box">
-      <h3 id="m-title"></h3>
-      <p id="m-body"></p>
-      <div id="m-fields"></div>
-      <button id="m-ok">OK</button>
+
+  <section id="ins" class="panel">
+    <div class="led-screen"><span id="led-text">G</span></div>
+    <h3 id="text">Doors closed</h3>
+    <div class="door-controls">
+      <button id="grid5" aria-label="Open doors"><span class="door-icon open-icon"></span>OPEN</button><button
+        id="gridclose" aria-label="Close doors"><span class="door-icon close-icon"></span>CLOSE</button>
+    </div>
+    <div id="in-lift-buttons" class="in-lift-panel"></div>
+    <div id="pplinlift" style="display:none;"></div>
+  </section>
+</main>
+
+<section id="monitoring-section">
+  <div id="info">
+    <p class="eyebrow">LIVE STATUS</p>
+    <h2>System status</h2>
+    <pre id="status"></pre>
+  </div>
+  <div id="log-section">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">EVENT STREAM</p>
+        <h2>Lift log</h2>
+      </div><span id="log-count">0 EVENTS</span>
+    </div>
+    <ol id="event-log"></ol>
+  </div>
+</section>
+
+<!-- SMARTLIFT AI & VISION DASHBOARDS -->
+<section class="dashboard-section">
+  <div class="section-heading" style="margin-bottom: 16px;">
+    <div>
+      <p class="eyebrow">INTELLIGENT DISPATCH & VISION TELEMETRY</p>
+      <h2>AI Operational Dashboards</h2>
+    </div>
+    <span class="badge-pill online" id="sim-id-label">SESSION: ACTIVE</span>
+  </div>
+
+  <div class="dashboard-grid">
+    <!-- 1. Predictive Demand Card -->
+    <div class="dash-card">
+      <h3>
+        <span>1. ML Demand Forecasting</span>
+        <span class="badge-pill" id="ml-target-pill">Target: Floor G</span>
+      </h3>
+      <p class="dash-subtitle">Predicted 5-Min Hall Calls per Floor (Python ML / Heuristic)</p>
+      <div style="font-size: 0.8rem; display: flex; justify-content: space-between; margin-top: 4px;">
+        <span>Proactive Parking: <strong id="park-decision-text" style="color:var(--orange);">Floor G</strong></span>
+        <span style="font-size: 0.72rem; color: #777;">Score: 2.0&middot;D &minus; 0.15&middot;&Delta;dist</span>
+      </div>
+      <div class="demand-bars" id="demand-bars-container">
+        <!-- Populated dynamically -->
+      </div>
+      <div style="font-size: 0.7rem; color: #555; border-top: 1px solid var(--line); padding-top: 6px;">
+        <strong>Held-out Test (Days 18-21):</strong> MAE 0.141 &bull; RMSE 0.354 &bull; Acc 87.8%
+      </div>
+      <button id="btn-reposition-now" class="btn-reposition-action"
+        title="Immediately dispatch idle lift to the predicted demand target floor">
+        🚀 Pre-position Idle Lift to Floor G
+      </button>
+    </div>
+
+    <!-- 2. Skip & Return Matrix Card -->
+    <div class="dash-card">
+      <h3>
+        <span>2. Occupancy-Gated Skip & Return</span>
+        <span class="badge-pill warning" id="skip-count-pill">0 Skipped</span>
+      </h3>
+      <p class="dash-subtitle">High-Priority Retained Queue & Explainable Return Decisions</p>
+      <div style="font-size: 0.8rem;">
+        <span>Active Return Target: <strong id="return-target-text" style="color:var(--teal);">&mdash;</strong></span>
+      </div>
+      <table class="metrics-table">
+        <thead>
+          <tr>
+            <th>Floor</th>
+            <th>Dir</th>
+            <th>Wait</th>
+            <th>Dist</th>
+            <th>Utility Score</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="skip-table-body">
+          <tr>
+            <td colspan="6" style="text-align:center; color:#888;">No skipped requests pending.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="log-scrollbox" id="skip-reason-box">
+        Decision Log: All stops operating normally.
+      </div>
+    </div>
+
+    <!-- 3. Computer Vision Card -->
+    <div class="dash-card">
+      <h3>
+        <span>3. OpenCV Vision Counter</span>
+        <span class="badge-pill" id="cv-status-pill">OpenCV: Active</span>
+      </h3>
+      <p class="dash-subtitle">Real Frame Inference & Temporal Smoothing (Estimate)</p>
+      <div class="cv-preview-box" id="cv-preview-container">
+        <img id="cv-preview-img" class="cv-preview-img" src="" alt="Awaiting CV analysis..." style="display:none;" />
+        <span id="cv-preview-placeholder" style="color:#aaa; font-size:0.75rem;">No video processed yet</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:0.8rem;">
+        <span>Detected People: <strong id="cv-detected-count" style="color:var(--teal);">0 (Estimate)</strong></span>
+        <span id="cv-detector-label" style="font-size:0.72rem; color:#777;">HOG / MOG2</span>
+      </div>
+      <div class="cv-controls">
+        <button id="btn-run-cv" class="btn-sm primary">▶ Analyze Lobby Video</button>
+        <button id="btn-gen-video" class="btn-sm">Create Demo Video</button>
+        <button id="btn-apply-cv" class="btn-sm" title="Apply CV estimated count to current floor">Use for Current
+          Floor</button>
+      </div>
+    </div>
+
+    <!-- 4. Scientific Benchmark Comparison Card -->
+    <div class="dash-card">
+      <h3>
+        <span>4. Scientific Evaluation</span>
+        <span class="badge-pill online" id="bm-status-pill">Evaluation: Ready</span>
+      </h3>
+      <p class="dash-subtitle">Comparing Baseline LOOK/SCAN vs SmartLift Predictive Dispatch</p>
+      <table class="metrics-table" id="benchmark-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>SmartLift</th>
+            <th>Baseline</th>
+            <th>Delta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Avg Wait Time</td>
+            <td id="bm-base-wait">-- s</td>
+            <td id="bm-smart-wait">-- s</td>
+            <td id="bm-wait-delta" class="positive-delta">--</td>
+          </tr>
+          <tr>
+            <td>P95 Wait Time</td>
+            <td id="bm-base-p95">-- s</td>
+            <td id="bm-smart-p95">-- s</td>
+            <td id="bm-p95-delta" class="positive-delta">--</td>
+          </tr>
+          <tr>
+            <td>Total Stops</td>
+            <td id="bm-base-stops">--</td>
+            <td id="bm-smart-stops">--</td>
+            <td id="bm-stops-delta">--</td>
+          </tr>
+          <tr>
+            <td>Travel Distance</td>
+            <td id="bm-base-dist">-- fl</td>
+            <td id="bm-smart-dist">-- fl</td>
+            <td id="bm-dist-delta" class="tradeoff-delta">--</td>
+          </tr>
+          <tr>
+            <td>Service Rate</td>
+            <td id="bm-base-rate">-- %</td>
+            <td id="bm-smart-rate">-- %</td>
+            <td id="bm-rate-delta" class="positive-delta">--</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 0.74rem;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span style="color:#666;">Live Session Serviced:</span>
+          <strong id="bm-session-served" style="color:var(--teal);">0 calls (0 passengers)</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+          <span style="color:#666;">Live Avg Wait Time:</span>
+          <strong id="bm-session-avg-wait" style="color:var(--orange);">0.0s (Live Telemetry)</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:#666;">Occupancy Skips Handled:</span>
+          <strong id="bm-session-skips" style="color:var(--purple, #7c3aed);">0 executed</strong>
+        </div>
+      </div>
+
+      <button id="btn-card-benchmark" class="btn-sm primary"
+        style="width:100%; margin-top:8px; font-weight:600; padding:8px;"
+        title="Replay scientific benchmark scenarios comparing traditional LOOK vs SmartLift">
+        ▶ Run Scientific Benchmark Replay
+      </button>
     </div>
   </div>
-  <!-- 1. Load the model class first -->
-<script src="model.js"></script>
-  <script src="sscript.js"></script>
+</section>
+
+<div id="modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="m-title">
+  <div class="box">
+    <h3 id="m-title"></h3>
+    <p id="m-body"></p>
+    <div id="m-fields"></div>
+    <div style="display: flex; gap: 8px; margin-top: 14px;">
+      <button id="m-ok" class="btn-sm primary" style="flex: 1; padding: 9px;">OK</button>
+      <button id="m-cancel" type="button" class="btn-sm" style="padding: 9px 16px;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="sscript.js"></script>
 </body>
 
 </html>

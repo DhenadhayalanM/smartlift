@@ -1,0 +1,10 @@
+{
+  "name": "smartlift",
+  "version": "1.0.0",
+  "description": "SmartLift AI - Predictive Demand & Occupancy-Gated Elevator Simulator",
+  "scripts": {
+    "start": "npm --prefix backend start",
+    "dev": "npm --prefix backend start",
+    "test": "npm --prefix backend test"
+  }
+}
